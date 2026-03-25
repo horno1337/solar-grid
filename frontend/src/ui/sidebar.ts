@@ -1,6 +1,7 @@
 import type { AppState, DecisionResult, MarketSnapshot, WeatherSnapshot } from '../types/index.js';
 import { REGIONS, buildSnapshot } from '../data/regions.js';
 import { computeDecision, computeGeneration, effectiveIrradianceFromWeather, effectiveIrradianceStatic } from '../engine/decision.js';
+import { getCachedIrradiance } from '../engine/irradianceModel.js';
 
 // ── Weather helper ────────────────────────────────────────────────────────────
 // Looks up the cached WeatherSnapshot for a region at the current hour.
@@ -46,6 +47,8 @@ export function renderRegionCard(state: AppState, snap: MarketSnapshot): void {
 	const card = document.getElementById('region-card');
 	if (!card) return;
 
+
+
 	const id = state.selectedRegionId;
 	if (!id) {
 		card.innerHTML = `
@@ -73,6 +76,22 @@ export function renderRegionCard(state: AppState, snap: MarketSnapshot): void {
 		`${(weather.directRadiationWm2 + weather.diffuseRadiationWm2).toFixed(0)} W/m²`
 		: 'Fetching weather data…';
 
+	const mlActive = getCachedIrradiance(id, currentHour) !== undefined;
+
+	const mlBadge = mlActive
+		? `<div style="display:inline-flex;align-items:center;gap:6px;font-size:0.68rem;
+       font-family:'Space Mono',monospace;color:#3be8b0;margin-bottom:16px;">
+       <span style="width:7px;height:7px;border-radius:50%;background:#3be8b0;
+         display:inline-block;animation:pulse 1.5s infinite;"></span>
+       ML model active · MAE ±0.004 kWh/m²
+     </div>`
+		: `<div style="display:inline-flex;align-items:center;gap:6px;font-size:0.68rem;
+       font-family:'Space Mono',monospace;color:var(--dim);margin-bottom:16px;">
+       <span style="width:7px;height:7px;border-radius:50%;background:var(--dim);
+         display:inline-block;"></span>
+       Physics model · warming ML...
+     </div>`;
+
 	card.innerHTML = `
     <div class="region-name">${region.name}</div>
     <div class="region-voivodeship">
@@ -82,9 +101,11 @@ export function renderRegionCard(state: AppState, snap: MarketSnapshot): void {
       </span>
     </div>
 
-    <div class="weather-line" style="font-size:0.75rem;color:var(--dim);margin-bottom:16px;font-family:'Space Mono',monospace;">
+    <div class="weather-line" style="font-size:0.75rem;color:var(--dim);margin-bottom:12px;font-family:'Space Mono',monospace;">
       ${weatherLine}
     </div>
+
+    ${mlBadge}
 
     <div class="decision-banner ${result.action}">
       <div class="decision-icon">${ICONS[result.action]}</div>
@@ -108,7 +129,7 @@ export function renderRegionCard(state: AppState, snap: MarketSnapshot): void {
 
     <div class="math-block">
 <span class="formula-line">── Math Breakdown ──────────────</span>
-Gen  = ${settings.capacityKwp} kWp × ${irrDisplay} irr × 0.18
+Gen  = ${settings.capacityKwp} kWp × ${irrDisplay} irr × 0.18  ${mlActive ? '← LightGBM' : '← physics'}
      = ${result.generationKwh.toFixed(3)} kWh
 
 Sell = ${result.generationKwh.toFixed(3)} kWh × ${result.spotPricePln.toFixed(0)} PLN/MWh ÷ 1000
