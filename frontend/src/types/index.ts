@@ -48,8 +48,7 @@ export interface MarketSnapshot {
 }
 
 // ── Weather snapshot for a single hour at a specific location ───────────────
-// All values come directly from the Open-Meteo API response.
-// We store one WeatherSnapshot per hour, per region, in a 24-element array.
+//values come directly from the Open-Meteo API response.
 export interface WeatherSnapshot {
 	/** Direct beam radiation hitting the panel surface (W/m²).
 	 *  This is the most important field — it's the "strong direct sunlight" component. */
