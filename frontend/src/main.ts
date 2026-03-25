@@ -1,5 +1,5 @@
-import type { AppState } from './types/index.js';
-import { REGIONS } from './data/regions.js';
+import type { AppState, MarketSnapshot } from './types/index.js';
+import { REGIONS, buildSnapshot } from './data/regions.js';
 import { buildMapSVG, updateMapColors } from './map/polandMap.js';
 import {
 	updateHeader,
@@ -15,6 +15,8 @@ import {
 	isForecastFresh,
 	buildFallbackForecast,
 } from './api/weather.js';
+import { buildLiveSnapshot } from './api/entso.js';
+import { getGridState } from './api/pse.js';
 
 // ── App state ─────────────────────────────────────────────────────────────────
 const state: AppState = {
@@ -31,14 +33,39 @@ const state: AppState = {
 	},
 };
 
+// ── Live market data ──────────────────────────────────────────────────────────
+// We keep a module-level snapshot so renderAll() can remain synchronous
+// (important for the animation tick) while the data is refreshed
+// asynchronously in the background.
+let currentSnapshot: MarketSnapshot = buildSnapshot(
+	state.currentHour,
+	state.tickDrift,
+);
+
+async function refreshMarketData(): Promise<void> {
+	const [snap, grid] = await Promise.all([
+		buildLiveSnapshot(state.currentHour),
+		getGridState(),
+	]);
+
+	// Merge the live grid state into the snapshot from ENTSO-E
+	currentSnapshot = {
+		...snap,
+		gridLoadMw:      grid.loadMw,
+		nationalSolarMw: grid.solarMw,
+	};
+
+	renderAll();
+}
+
 // ── SVG reference — set once in init(), used everywhere ──────────────────────
 let svg: SVGSVGElement;
 
 // ── Render — module-level so all async code can call it ───────────────────────
 function renderAll(): void {
-	updateMapColors(svg, state);
-	updateHeader(state);
-	renderRegionCard(state);
+	updateMapColors(svg, state, currentSnapshot);
+	updateHeader(state, currentSnapshot);
+	renderRegionCard(state, currentSnapshot);
 }
 
 // ── Weather fetching ──────────────────────────────────────────────────────────
@@ -79,7 +106,7 @@ function init(): void {
 			renderAll();
 			void ensureWeatherForRegion(id);
 		},
-		onHover: (id, x, y) => showTooltip(id, x, y, state),
+		onHover: (id, x, y) => showTooltip(id, x, y, state, currentSnapshot),
 		onLeave: hideTooltip,
 	});
 
@@ -97,6 +124,11 @@ function init(): void {
 
 	renderAll();
 
+	// Fetch live market data immediately, then refresh every 15 minutes
+	void refreshMarketData();
+	setInterval(() => { void refreshMarketData(); }, 15 * 60 * 1_000);
+
+	// Visual drift tick — keeps the UI lively between data refreshes
 	setInterval(() => {
 		state.tickDrift += (Math.random() - 0.45) * 0.8;
 		state.tickDrift = Math.max(-8, Math.min(8, state.tickDrift));

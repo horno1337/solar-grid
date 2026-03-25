@@ -95,7 +95,6 @@ export async function fetchWeatherForecast(
 }
 
 // ── Cache helpers ────────────────────────────────────────────────────────────
-// We don't want to hammer the API on every render tick.
 // This checks whether a cached forecast is still fresh enough to use.
 // "Fresh" means fetched within the last hour — weather data doesn't change
 // minute-to-minute, so re-fetching hourly is more than sufficient.
@@ -106,10 +105,6 @@ export function isForecastFresh(forecast: RegionWeatherForecast): boolean {
 }
 
 // ── Fallback ─────────────────────────────────────────────────────────────────
-// If the API is unreachable (user is offline, API is down), we fall back to
-// a synthetic forecast built from the same static SOLAR_PROFILE we used before.
-// This means the app always has something to show — it just won't be real data.
-// The UI will display a "simulated" badge in this case.
 import { SOLAR_PROFILE } from '../data/regions.js';
 
 export function buildFallbackForecast(regionId: string): RegionWeatherForecast {

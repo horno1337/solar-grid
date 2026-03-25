@@ -1,6 +1,5 @@
-import type { AppState } from '../types/index.js';
+import type { AppState, MarketSnapshot } from '../types/index.js';
 import { REGIONS } from '../data/regions.js';
-import { buildSnapshot } from '../data/regions.js';
 import { computeDecision, decisionColor } from '../engine/decision.js';
 
 // ── SVG path data for each voivodeship (simplified polygons) ──────────────
@@ -92,9 +91,7 @@ export function buildMapSVG(
 }
 
 /** Update fill colours based on current app state.  Call on every tick. */
-export function updateMapColors(svg: SVGSVGElement, state: AppState): void {
-	const snapshot = buildSnapshot(state.currentHour, state.tickDrift);
-
+export function updateMapColors(svg: SVGSVGElement, state: AppState, snapshot: MarketSnapshot): void {
 	svg.querySelectorAll<SVGPathElement>('.region').forEach(path => {
 		const id = path.dataset['id'];
 		if (!id || !REGIONS[id]) return;

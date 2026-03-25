@@ -1,4 +1,4 @@
-import type { AppState, DecisionResult, WeatherSnapshot } from '../types/index.js';
+import type { AppState, DecisionResult, MarketSnapshot, WeatherSnapshot } from '../types/index.js';
 import { REGIONS, buildSnapshot } from '../data/regions.js';
 import { computeDecision, computeGeneration, effectiveIrradianceFromWeather, effectiveIrradianceStatic } from '../engine/decision.js';
 
@@ -10,8 +10,7 @@ function getWeather(state: AppState, regionId: string): WeatherSnapshot | undefi
 }
 
 // ── Header stats ──────────────────────────────────────────────────────────────
-export function updateHeader(state: AppState): void {
-	const snap = buildSnapshot(state.currentHour, state.tickDrift);
+export function updateHeader(state: AppState, snap: MarketSnapshot): void {
 	const bal = snap.nationalSolarMw - snap.gridLoadMw * 0.05;
 
 	setText('h-price', snap.spotPricePln.toFixed(0));
@@ -43,7 +42,7 @@ const LABELS: Record<DecisionResult['action'], string> = {
 	neutral: 'HOLD / NEUTRAL',
 };
 
-export function renderRegionCard(state: AppState): void {
+export function renderRegionCard(state: AppState, snap: MarketSnapshot): void {
 	const card = document.getElementById('region-card');
 	if (!card) return;
 
@@ -58,7 +57,6 @@ export function renderRegionCard(state: AppState): void {
 	}
 
 	const region = REGIONS[id];
-	const snap = buildSnapshot(state.currentHour, state.tickDrift);
 	const weather = getWeather(state, id);
 	const result = computeDecision(region, snap, state.settings, weather);
 	const { settings, currentHour } = state;
@@ -222,10 +220,9 @@ function drawSparkline(state: AppState, regionId: string): void {
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
-export function showTooltip(regionId: string, x: number, y: number, state: AppState): void {
+export function showTooltip(regionId: string, x: number, y: number, state: AppState, snap: MarketSnapshot): void {
 	const tip = document.getElementById('tooltip');
 	if (!tip) return;
-	const snap = buildSnapshot(state.currentHour, state.tickDrift);
 	const weather = getWeather(state, regionId);
 	const result = computeDecision(REGIONS[regionId], snap, state.settings, weather);
 	const labels: Record<DecisionResult['action'], string> = {
