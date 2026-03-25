@@ -1,18 +1,3 @@
-"""
-fetch_historical.py
-
-Downloads 12 months of historical data needed to train the forecasting models:
-  1. Hourly weather data for all 16 Polish voivodeships (Open-Meteo)
-  2. Hourly day-ahead electricity prices for Poland (ENTSO-E)
-
-Output:
-  data/raw/weather_<REGION_ID>.csv   — one file per voivodeship
-  data/raw/prices_pl.csv             — single file for all prices
-
-Run with:
-  uv run python scripts/fetch_historical.py
-"""
-
 import time
 import httpx
 import pandas as pd
