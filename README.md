@@ -12,8 +12,7 @@
 ## What is this?
 
 Since 2022, Polish solar panel owners (called **prosumers**) operate under a net-billing system — they can either consume the electricity their panels generate, or sell it back to the grid at the current spot price. The right choice changes throughout the day depending on weather conditions, grid load, and market prices.
-
-SolarGrid PL is an interactive map that answers that question in real time, for every voivodeship in Poland simultaneously. It fetches live atmospheric data from Open-Meteo, models solar generation based on real cloud cover and temperature, compares the revenue from selling against the savings from self-consuming, and colors each region accordingly.
+So I made a basic interactive map that answers that question in real time, for every region in Poland simultaneously. It fetches live atmospheric data from Open-Meteo, models solar generation based on real cloud cover and temperature, compares the revenue from selling against the savings from self-consuming, and colors each region accordingly.
 
 ---
 
@@ -38,32 +37,6 @@ The **temperature correction** accounts for the fact that solar panels lose appr
 
 ---
 
-## Architecture
-
-The project is split into two parts that will eventually work together:
-
-```
-solar-grid/
-├── frontend/        TypeScript + Vite — the interactive map and decision engine
-│   └── src/
-│       ├── api/         External data fetching (Open-Meteo weather)
-│       ├── data/        Static region configs, simulated market data
-│       ├── engine/      Core sell-vs-consume decision logic
-│       ├── map/         SVG Poland map rendering
-│       ├── types/       All TypeScript interfaces and domain types
-│       └── ui/          Sidebar, controls, region detail card
-│
-└── ml/              Python — ML training pipeline (Phase 3+)
-    ├── data/            Raw and processed datasets
-    ├── notebooks/       Exploration and analysis
-    ├── scripts/         Data fetching and preprocessing
-    └── src/             Model training and export
-```
-
-The two sides communicate through a clean interface: the Python pipeline will train forecasting models and export them as JSON files into `frontend/src/models/`. The frontend loads them as static assets and runs inference in the browser — meaning no Python server is needed in production.
-
----
-
 ## Data sources
 
 | Source | What it provides | Status |
@@ -72,7 +45,7 @@ The two sides communicate through a clean interface: the Python pipeline will tr
 | [PSE OpenData](https://www.pse.pl/dane-systemowe) | National grid load and balance | 🔜 Phase 2 |
 | [TGE RDN](https://tge.pl) | Day-ahead spot prices (PLN/MWh) | 🔜 Phase 2 |
 
-Currently, market data (prices and grid load) is simulated using realistic 24-hour patterns based on historical Polish market behaviour. The weather data is live from Open-Meteo with no API key required.
+Currently, market data (prices and grid load) is simulated using realistic 24-hour patterns based on historical Polish market behaviour. The weather data is live from Open-Meteo.
 
 ---
 
@@ -99,19 +72,6 @@ npm run typecheck
 ```
 
 ---
-
-## Roadmap
-
-The project is being built in phases, each one independently useful before the next begins.
-
-**Phase 0 — Repository setup** ✅ Done  
-**Phase 1 — Weather integration** ✅ Done — real atmospheric data from Open-Meteo replacing static irradiance profiles  
-**Phase 2 — Real market data** 🔜 Next — live PSE grid load and TGE spot prices replacing simulated series  
-**Phase 3 — Python ML environment** — training pipeline setup, historical data collection  
-**Phase 4 — Irradiance forecasting model** — LightGBM model predicting generation based on weather features  
-**Phase 5 — Price forecasting model** — 6-hour ahead spot price prediction  
-**Phase 6 — Decision engine upgrade** — optimal sell hour within forecast window, battery SoC simulation  
-**Phase 7 — Deployment** — static hosting on GitHub Pages or Vercel  
 
 Open issues are tracked in the [Issues tab](../../issues).
 
