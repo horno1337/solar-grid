@@ -6,6 +6,7 @@ import type {
 	WeatherSnapshot,
 } from '../types/index.js';
 import { SOLAR_PROFILE, AVERAGE_PRICE } from '../data/regions.js';
+import { getCachedIrradiance } from './irradianceModel.js';
 
 // ── Physical constants ────────────────────────────────────────────────────────
 // Mono-crystalline silicon panels — the most common type installed in Poland.
@@ -69,12 +70,20 @@ export function effectiveIrradianceFromWeather(weather: WeatherSnapshot): number
  * data. If not (e.g. weather API failed), falls back to the static profile.
  * This degradation means the app always works even offline.
  */
+// Replace the existing computeGeneration for ML model
 export function computeGeneration(
 	region: RegionConfig,
 	hour: number,
 	capacityKwp: number,
 	weather?: WeatherSnapshot,
 ): number {
+	// Use ML prediction if in cache
+	const cached = getCachedIrradiance(region.id, hour);
+	if (cached !== undefined) {
+		return cached * capacityKwp * PANEL_EFFICIENCY;
+	}
+
+	// Fall back to physics-based calculation
 	const irradiance = weather
 		? effectiveIrradianceFromWeather(weather)
 		: effectiveIrradianceStatic(region, hour);
@@ -84,119 +93,119 @@ export function computeGeneration(
 
 // ── Market calculations ───────────────────────────────────────────────────────
 
-/**
- * Grid congestion penalty factor.
- *
- * When solar covers >15% of national load, wholesale prices tend to
- * drop non-linearly (the merit-order effect). On very sunny days in
- * summer, Polish spot prices regularly go near-zero or even negative
- * during midday hours. We model this as a linear penalty.
- */
-export function congestionPenalty(snapshot: MarketSnapshot): number {
-	const share = snapshot.nationalSolarMw / snapshot.gridLoadMw;
-	return share > 0.15 ? (share - 0.15) * 50 : 0;
-}
-
-/** Solar grid share as a percentage */
-export function solarGridSharePct(snapshot: MarketSnapshot): number {
-	return (snapshot.nationalSolarMw / snapshot.gridLoadMw) * 100;
-}
-
-// ── Core decision function ────────────────────────────────────────────────────
-
-/**
-Given a region, current market conditions,
-prosumer settings, and optionally real weather data, returns a fully
-explained decision: sell, consume, or neutral.
- */
-export function computeDecision(
-	region: RegionConfig,
-	snapshot: MarketSnapshot,
-	settings: ProsumerSettings,
-	weather?: WeatherSnapshot,
-): DecisionResult {
-	const { capacityKwp, batteryKwh, tariffPlnPerKwh } = settings;
-	const { spotPricePln } = snapshot;
-	const hour = snapshot.hour;
-
-	const generationKwh = computeGeneration(region, hour, capacityKwp, weather);
-	const penaltyPct = congestionPenalty(snapshot);
-	const sharePct = solarGridSharePct(snapshot);
-
-	// Effective sell price after congestion discount
-	const effectiveSellPlnPerKwh = (spotPricePln / 1_000) - (penaltyPct / 1_000);
-
-	const sellRevenuePln = generationKwh * Math.max(0, effectiveSellPlnPerKwh);
-	const consumeValuePln = generationKwh * tariffPlnPerKwh;
-
-	// Battery bonus: if price is low right now and we have storage,
-	// self-consuming + charging is worth more than selling at a depressed price.
-	const batteryBonusPln =
-		batteryKwh > 0 && spotPricePln < AVERAGE_PRICE * 0.85
-			? batteryKwh * tariffPlnPerKwh * 0.3
-			: 0;
-
-	const score = sellRevenuePln - consumeValuePln;
-
-	// Dead-band: differences under 0.05 PLN are too thin to act on confidently
-	const THRESHOLD = 0.05;
-
-	let action: DecisionResult['action'];
-	let confidence: string;
-
-
-	if (generationKwh < 0.05) {
-		action = 'neutral';
-		// Tell the user *why* there's no generation — is it night, or clouds?
-		const isNightHour = hour < 6 || hour > 20;
-		confidence = isNightHour
-			? 'No generation — outside daylight hours.'
-			: weather && weather.cloudCoverPct > 80
-				? `Heavy cloud cover (${weather.cloudCoverPct.toFixed(0)}%) — generation near zero.`
-				: 'No significant generation at this hour.';
-	} else if (score > THRESHOLD) {
-		action = 'sell';
-		confidence =
-			`Spot ${(spotPricePln / 1_000).toFixed(3)} PLN/kWh > tariff ` +
-			`${tariffPlnPerKwh.toFixed(2)} PLN/kWh — grid pays more.`;
-	} else if (score < -THRESHOLD) {
-		action = 'consume';
-		confidence =
-			`Self-consumption saves ${consumeValuePln.toFixed(2)} PLN vs ` +
-			`${sellRevenuePln.toFixed(2)} PLN selling at current spot.`;
-	} else {
-		action = 'neutral';
-		confidence = 'Margin < 0.05 PLN — decide based on battery SoC and forecast.';
+	/**
+	 * Grid congestion penalty factor.
+	 *
+	 * When solar covers >15% of national load, wholesale prices tend to
+	 * drop non-linearly (the merit-order effect). On very sunny days in
+	 * summer, Polish spot prices regularly go near-zero or even negative
+	 * during midday hours. We model this as a linear penalty.
+	 */
+	export function congestionPenalty(snapshot: MarketSnapshot): number {
+		const share = snapshot.nationalSolarMw / snapshot.gridLoadMw;
+		return share > 0.15 ? (share - 0.15) * 50 : 0;
 	}
 
-
-
-	return {
-		action,
-		score,
-		generationKwh,
-		spotPricePln,
-		sellRevenuePln,
-		consumeValuePln,
-		solarGridSharePct: sharePct,
-		congestionPenaltyPct: penaltyPct,
-		batteryBonusPln,
-		confidence,
-	};
-}
-
-/** Map a decision to a fill colour for the SVG choropleth */
-export function decisionColor(result: DecisionResult): string {
-	const { action, score } = result;
-	if (action === 'sell') {
-		const intensity = Math.min(Math.abs(score) * 3, 1);
-		const alpha = 0.35 + intensity * 0.55;
-		return `rgba(240,192,64,${alpha.toFixed(2)})`;
+	/** Solar grid share as a percentage */
+	export function solarGridSharePct(snapshot: MarketSnapshot): number {
+		return (snapshot.nationalSolarMw / snapshot.gridLoadMw) * 100;
 	}
-	if (action === 'consume') {
-		const intensity = Math.min(Math.abs(score) * 3, 1);
-		const alpha = 0.35 + intensity * 0.55;
-		return `rgba(59,232,176,${alpha.toFixed(2)})`;
+
+	// ── Core decision function ────────────────────────────────────────────────────
+
+	/**
+	Given a region, current market conditions,
+	prosumer settings, and optionally real weather data, returns a fully
+	explained decision: sell, consume, or neutral.
+	 */
+	export function computeDecision(
+		region: RegionConfig,
+		snapshot: MarketSnapshot,
+		settings: ProsumerSettings,
+		weather?: WeatherSnapshot,
+	): DecisionResult {
+		const { capacityKwp, batteryKwh, tariffPlnPerKwh } = settings;
+		const { spotPricePln } = snapshot;
+		const hour = snapshot.hour;
+
+		const generationKwh = computeGeneration(region, hour, capacityKwp, weather);
+		const penaltyPct = congestionPenalty(snapshot);
+		const sharePct = solarGridSharePct(snapshot);
+
+		// Effective sell price after congestion discount
+		const effectiveSellPlnPerKwh = (spotPricePln / 1_000) - (penaltyPct / 1_000);
+
+		const sellRevenuePln = generationKwh * Math.max(0, effectiveSellPlnPerKwh);
+		const consumeValuePln = generationKwh * tariffPlnPerKwh;
+
+		// Battery bonus: if price is low right now and we have storage,
+		// self-consuming + charging is worth more than selling at a depressed price.
+		const batteryBonusPln =
+			batteryKwh > 0 && spotPricePln < AVERAGE_PRICE * 0.85
+				? batteryKwh * tariffPlnPerKwh * 0.3
+				: 0;
+
+		const score = sellRevenuePln - consumeValuePln;
+
+		// Dead-band: differences under 0.05 PLN are too thin to act on confidently
+		const THRESHOLD = 0.05;
+
+		let action: DecisionResult['action'];
+		let confidence: string;
+
+
+		if (generationKwh < 0.05) {
+			action = 'neutral';
+			// Tell the user *why* there's no generation — is it night, or clouds?
+			const isNightHour = hour < 6 || hour > 20;
+			confidence = isNightHour
+				? 'No generation — outside daylight hours.'
+				: weather && weather.cloudCoverPct > 80
+					? `Heavy cloud cover (${weather.cloudCoverPct.toFixed(0)}%) — generation near zero.`
+					: 'No significant generation at this hour.';
+		} else if (score > THRESHOLD) {
+			action = 'sell';
+			confidence =
+				`Spot ${(spotPricePln / 1_000).toFixed(3)} PLN/kWh > tariff ` +
+				`${tariffPlnPerKwh.toFixed(2)} PLN/kWh — grid pays more.`;
+		} else if (score < -THRESHOLD) {
+			action = 'consume';
+			confidence =
+				`Self-consumption saves ${consumeValuePln.toFixed(2)} PLN vs ` +
+				`${sellRevenuePln.toFixed(2)} PLN selling at current spot.`;
+		} else {
+			action = 'neutral';
+			confidence = 'Margin < 0.05 PLN — decide based on battery SoC and forecast.';
+		}
+
+
+
+		return {
+			action,
+			score,
+			generationKwh,
+			spotPricePln,
+			sellRevenuePln,
+			consumeValuePln,
+			solarGridSharePct: sharePct,
+			congestionPenaltyPct: penaltyPct,
+			batteryBonusPln,
+			confidence,
+		};
 	}
-	return 'rgba(58,74,106,0.6)';
-}
+
+	/** Map a decision to a fill colour for the SVG choropleth */
+	export function decisionColor(result: DecisionResult): string {
+		const { action, score } = result;
+		if (action === 'sell') {
+			const intensity = Math.min(Math.abs(score) * 3, 1);
+			const alpha = 0.35 + intensity * 0.55;
+			return `rgba(240,192,64,${alpha.toFixed(2)})`;
+		}
+		if (action === 'consume') {
+			const intensity = Math.min(Math.abs(score) * 3, 1);
+			const alpha = 0.35 + intensity * 0.55;
+			return `rgba(59,232,176,${alpha.toFixed(2)})`;
+		}
+		return 'rgba(58,74,106,0.6)';
+	}

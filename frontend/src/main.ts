@@ -17,6 +17,7 @@ import {
 } from './api/weather.js';
 import { buildLiveSnapshot } from './api/entso.js';
 import { getGridState } from './api/pse.js';
+import { warmPredictionCache } from './engine/irradianceModel.js';
 
 // ── App state ─────────────────────────────────────────────────────────────────
 const state: AppState = {
@@ -51,7 +52,7 @@ async function refreshMarketData(): Promise<void> {
 	// Merge the live grid state into the snapshot from ENTSO-E
 	currentSnapshot = {
 		...snap,
-		gridLoadMw:      grid.loadMw,
+		gridLoadMw: grid.loadMw,
 		nationalSolarMw: grid.solarMw,
 	};
 
@@ -84,6 +85,7 @@ async function ensureWeatherForRegion(regionId: string): Promise<void> {
 	try {
 		const forecast = await fetchWeatherForecast(regionId, region.lat, region.lon);
 		state.weatherCache[regionId] = forecast;
+		void warmPredictionCache(regionId, region.lat, forecast.hourly);
 		state.weatherMode = 'live';
 	} catch (err) {
 		console.warn(`Weather fetch failed for ${regionId}, using fallback.`, err);
