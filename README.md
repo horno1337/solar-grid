@@ -42,8 +42,8 @@ The **temperature correction** accounts for the fact that solar panels lose appr
 | Source | What it provides | Status |
 |--------|-----------------|--------|
 | [Open-Meteo](https://open-meteo.com) | Real-time solar radiation, cloud cover, temperature per region | ✅ Live |
-| [PSE OpenData](https://www.pse.pl/dane-systemowe) | National grid load and balance | 🔜 Phase 2 |
-| [TGE RDN](https://tge.pl) | Day-ahead spot prices (PLN/MWh) | 🔜 Phase 2 |
+| [PSE OpenData](https://www.pse.pl/dane-systemowe) | National grid load and balance | 🔜 |
+| [TGE RDN](https://tge.pl) | Day-ahead spot prices (PLN/MWh) | 🔜 |
 
 Currently, market data (prices and grid load) is simulated using realistic 24-hour patterns based on historical Polish market behaviour. The weather data is live from Open-Meteo.
 
