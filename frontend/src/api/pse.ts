@@ -30,8 +30,11 @@ interface PseResponse {
 // the last completed 15-minute interval.
 export async function fetchCurrentGridState(): Promise<{ loadMw: number; solarMw: number }> {
 	// Request today's data — PSE uses date in YYYY-MM-DD format
+
+	// this needs fixing -- creating issue for this.
 	const today = new Date().toISOString().split('T')[0];
-	const url = `${PSE_BASE}/PL_GEN_MOC_JW_EPS?$filter=DOBA eq '${today}'&$orderby=CIM_OZNACZENIE_CZASOWE desc&$top=1`;
+	const filter = `DOBA eq '${today}'`;
+	const url = `${PSE_BASE}/PL_GEN_MOC_JW_EPS?$filter=${encodeURIComponent(filter)}&$top=1`;
 
 	const response = await fetch(url, {
 		headers: { 'Accept': 'application/json' }

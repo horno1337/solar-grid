@@ -79,7 +79,7 @@ export async function fetchDayAheadPrices(): Promise<number[]> {
 
 	const { start, end } = getTodayRange();
 
-	const url = new URL(ENTSO_BASE);
+	const url = new URL(ENTSO_BASE, window.location.origin);
 	url.searchParams.set('securityToken', token);
 	url.searchParams.set('documentType', 'A44');
 	url.searchParams.set('in_Domain', POLAND_DOMAIN);
