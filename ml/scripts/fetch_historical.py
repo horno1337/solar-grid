@@ -227,6 +227,3 @@ else:
         df_prices["day_of_week"] = pd.to_datetime(df_prices["timestamp"]).dt.dayofweek
         df_prices.to_csv(prices_path, index=False)
         print(f"\n  Saved {len(df_prices)} hourly prices to {prices_path.name}")
-
-print("\n── Done ───────────────────────────────────────────────────────────")
-print("Next step: run notebooks/01_explore_weather.ipynb to inspect the data")

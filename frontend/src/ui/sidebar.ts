@@ -2,6 +2,7 @@ import type { AppState, DecisionResult, MarketSnapshot, WeatherSnapshot } from '
 import { REGIONS, buildSnapshot } from '../data/regions.js';
 import { computeDecision, computeGeneration, effectiveIrradianceFromWeather, effectiveIrradianceStatic } from '../engine/decision.js';
 import { getCachedIrradiance } from '../engine/irradianceModel.js';
+import { getPricePattern } from '../engine/priceModel.js';
 
 // ── Weather helper ────────────────────────────────────────────────────────────
 // Looks up the cached WeatherSnapshot for a region at the current hour.
@@ -33,6 +34,19 @@ export function updateHeader(state: AppState, snap: MarketSnapshot): void {
 		const text = badgeEl.childNodes[1];
 		if (text) text.textContent = state.weatherMode === 'live' ? ' Live Weather' : ' Simulated';
 	}
+}
+
+// ── Optimal sell window ───────────────────────────────────────────────────────
+function findOptimalSellHour(
+	prices: number[],
+	generationByHour: number[],
+): { hour: number; revenue: number } {
+	let best = { hour: 0, revenue: -Infinity };
+	prices.forEach((price, hour) => {
+		const revenue = generationByHour[hour] * (price / 1000);
+		if (revenue > best.revenue) best = { hour, revenue };
+	});
+	return best;
 }
 
 // ── Region detail card ────────────────────────────────────────────────────────
@@ -76,6 +90,33 @@ export function renderRegionCard(state: AppState, snap: MarketSnapshot): void {
 		`${(weather.directRadiationWm2 + weather.diffuseRadiationWm2).toFixed(0)} W/m²`
 		: 'Fetching weather data…';
 
+	// 24h generation and known prices for optimal window calculation
+	const generationByHour = Array.from({ length: 24 }, (_, h) => {
+		const w = state.weatherCache[id]?.hourly[h];
+		return computeGeneration(region, h, settings.capacityKwp, w);
+	});
+
+	const knownPrices = Array.from({ length: 24 }, (_, h) =>
+		buildSnapshot(h, state.tickDrift).spotPricePln);
+
+	const optimal = findOptimalSellHour(knownPrices, generationByHour);
+
+	const optimalBanner = optimal.revenue > 0
+		? `<div style="background:rgba(240,192,64,0.08);border:1px solid rgba(240,192,64,0.3);
+       border-radius:6px;padding:12px 16px;margin-bottom:16px;display:flex;
+       align-items:center;gap:12px;">
+       <span style="font-size:1.4rem">⚡</span>
+       <div>
+         <div style="font-weight:700;color:var(--sell);font-size:0.85rem;">
+           Best sell window: ${String(optimal.hour).padStart(2, '0')}:00
+         </div>
+         <div style="font-size:0.7rem;color:var(--dim);margin-top:2px;">
+           Est. ${optimal.revenue.toFixed(2)} PLN · ${knownPrices[optimal.hour].toFixed(0)} PLN/MWh
+         </div>
+       </div>
+     </div>`
+		: '';
+
 	const mlActive = getCachedIrradiance(id, currentHour) !== undefined;
 
 	const mlBadge = mlActive
@@ -115,6 +156,8 @@ export function renderRegionCard(state: AppState, snap: MarketSnapshot): void {
       </div>
     </div>
 
+    ${optimalBanner}
+
     <div class="metrics-grid">
       ${metric('Generation', result.generationKwh.toFixed(2) + ' kWh', 'info')}
       ${metric('Spot Price', result.spotPricePln.toFixed(0) + ' PLN/MWh',
@@ -143,16 +186,19 @@ Save = ${result.generationKwh.toFixed(3)} kWh × ${settings.tariffPlnPerKwh.toFi
     </div>
 
     <div class="price-chart-wrap">
-      <div class="section-title" style="margin-top:14px;margin-bottom:8px">24h Spot Price + Generation</div>
+      <div class="section-title" style="margin-top:14px;margin-bottom:4px">24h Price · Generation · ML Pattern</div>
+      <div style="font-size:0.62rem;color:var(--dim);margin-bottom:8px;font-family:'Space Mono',monospace;">
+        Dashed line = historical price pattern (MAE ±148 PLN/MWh)
+      </div>
       <canvas id="price-canvas" width="260" height="90"></canvas>
     </div>
   `;
 
-	requestAnimationFrame(() => drawSparkline(state, id));
+	requestAnimationFrame(() => drawSparkline(state, id, knownPrices));
 }
 
 // ── 24h Sparkline ─────────────────────────────────────────────────────────────
-function drawSparkline(state: AppState, regionId: string): void {
+function drawSparkline(state: AppState, regionId: string, knownPrices: number[]): void {
 	const canvas = document.getElementById('price-canvas') as HTMLCanvasElement | null;
 	if (!canvas) return;
 	const ctx = canvas.getContext('2d');
@@ -164,8 +210,7 @@ function drawSparkline(state: AppState, regionId: string): void {
 	canvas.height = H;
 	ctx.clearRect(0, 0, W, H);
 
-	const priceData = Array.from({ length: 24 }, (_, h) =>
-		buildSnapshot(h, state.tickDrift).spotPricePln);
+	const priceData = knownPrices;
 
 	// Use real weather data for the sparkline generation curve if available,
 	// otherwise fall back to static profile
@@ -238,6 +283,26 @@ function drawSparkline(state: AppState, regionId: string): void {
 	ctx.strokeStyle = '#0a0e1a';
 	ctx.lineWidth = 2;
 	ctx.stroke();
+
+	// Draw ML price pattern overlay as dashed line (async — paints on top when ready)
+	void getPricePattern(state.currentHour, knownPrices).then(pattern => {
+		if (!canvas || !ctx) return;
+		const patternPrices = pattern.map(p => p.predicted);
+		const maxPat = Math.max(...patternPrices);
+		const minPat = Math.min(...patternPrices);
+
+		ctx.beginPath();
+		ctx.strokeStyle = 'rgba(240,192,64,0.4)';
+		ctx.lineWidth = 1.5;
+		ctx.setLineDash([3, 3]);
+		patternPrices.forEach((p, i) => {
+			const x = (i / 23) * W;
+			const y = H - ((p - minPat) / (maxPat - minPat + 1)) * (H - 8) - 4;
+			i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+		});
+		ctx.stroke();
+		ctx.setLineDash([]);
+	});
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
