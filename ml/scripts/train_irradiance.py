@@ -152,9 +152,9 @@ model_dict = model.booster_.dump_model()
 
 export = {
     "features": FEATURES,
-    "num_trees": model_dict["num_trees"],
-    "num_class": 1,
-    "average_output": False,
+    "num_trees": len(model_dict["tree_info"]),
+    "num_class": model_dict["num_class"],
+    "average_output": model_dict["average_output"],
     "tree_info": model_dict["tree_info"],
     "meta": {
         "mae": round(mae, 4),
@@ -172,4 +172,3 @@ with open(output_path, "w") as f:
 file_size_kb = output_path.stat().st_size / 1024
 print(f"Saved to {output_path}")
 print(f"File size: {file_size_kb:.1f} KB")
-print("\nDone. Next step: implement irradianceModel.ts in the frontend.")
