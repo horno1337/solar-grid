@@ -1,0 +1,13 @@
+#frontend
+frontend/node_modules/
+frontend/dist/
+
+#python
+ml/__pycache__/
+ml/.venv/
+*.pyc
+*.egg-info/
+.env
+
+#Misc
+.DS_Store
