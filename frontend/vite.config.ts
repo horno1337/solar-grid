@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+	base: '/solar-grid/',
 	root: '.',
 	publicDir: 'public',
 	build: { outDir: 'dist', sourcemap: true },

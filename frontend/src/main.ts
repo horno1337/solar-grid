@@ -138,4 +138,13 @@ function init(): void {
 	}, 2_000);
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+	init();
+
+	// Show demo banner if no ENTSO-E token is configured
+	const token = import.meta.env['VITE_ENTSO_TOKEN'] as string | undefined;
+	if (!token) {
+		const banner = document.getElementById('demo-banner');
+		if (banner) banner.style.display = 'block';
+	}
+});
