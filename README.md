@@ -1,4 +1,4 @@
-# SolarGrid PL 🌤️
+# SolarGrid 🌤️
 
 > Real-time solar energy decision map for Polish prosumers — should you sell your energy to the grid, or consume it yourself?
 
