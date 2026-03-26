@@ -1,4 +1,4 @@
-# SolarGrid 🌤️
+# SolarGrid PL 🌤️
 
 > Real-time solar energy decision map for Polish prosumers — should you sell your energy to the grid, or consume it yourself?
 
@@ -8,13 +8,15 @@
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Active%20Development-orange?style=flat-square)
 
+**[→ Live demo](https://horno1337.github.io/solar-grid/)** — market data simulated, weather & ML models are live
+
 ---
 
 ## What is this?
 
 Since 2022, Polish solar panel owners (called **prosumers**) operate under a net-billing system — they can either consume the electricity their panels generate, or sell it back to the grid at the current spot price. The right choice changes throughout the day depending on weather conditions, grid load, and market prices.
 
-So I built an interactive map that answers that question in real time, for every voivodeship in Poland simultaneously. It fetches live atmospheric data from Open-Meteo, runs a machine learning model to estimate solar generation, pulls day-ahead prices from ENTSO-E, and colors each region based on whether selling or self-consuming makes more financial sense right now.
+I built an interactive map that answers that question in real time, for every voivodeship in Poland simultaneously. It fetches live atmospheric data from Open-Meteo, runs a machine learning model to estimate solar generation, pulls day-ahead prices from ENTSO-E, and colors each region based on whether selling or self-consuming makes more financial sense right now.
 
 ---
 
@@ -46,12 +48,12 @@ Two LightGBM models run entirely in the browser — no server needed at inferenc
 **Irradiance model** — predicts effective solar generation from real-time weather features (direct radiation, diffuse radiation, cloud cover, temperature, precipitation, time encoding, latitude). Trained on 12 months of hourly data across all 16 voivodeships.
 
 | MAE | R² | Relative error |
-|-----|----|---------------|
+|-----|----|----------------|
 | 0.0036 kWh/m² | 0.9991 | 1.9% |
 
 Solar irradiance follows stable physics, so this one works well.
 
-**Price forecasting model** — predicts day-ahead spot prices (PLN/MWh) at 1h, 3h, and 6h horizons using lag features, rolling statistics, and cyclical time encoding.
+**Price forecasting model** — predicts Polish day-ahead spot prices (PLN/MWh) at 1h, 3h, and 6h horizons using lag features, rolling statistics, and cyclical time encoding.
 
 | Horizon | MAE | R² |
 |---------|-----|----|
@@ -59,7 +61,7 @@ Solar irradiance follows stable physics, so this one works well.
 | 3h ahead | 148.8 PLN/MWh | 0.11 |
 | 6h ahead | 151.4 PLN/MWh | 0.11 |
 
-Electricity prices are genuinely hard to forecast — driven by plant outages, weather shocks, and foreign flows that lag features can't anticipate. The model captures structural patterns (morning/evening peaks, weekend discounts, seasonality) but not short-term volatility. It's displayed as a historical pattern overlay with explicit uncertainty messaging, not as a precise prediction. The optimal sell window recommendation uses the known ENTSO-E day-ahead prices (published the night before, so certain) combined with the ML generation estimate.
+Electricity prices are genuinely hard to forecast — driven by plant outages, weather shocks, and cross-border flows that lag features can't anticipate. The model captures structural patterns (morning/evening peaks, weekend discounts, seasonality) but not short-term volatility. It's displayed as a historical pattern overlay with explicit uncertainty messaging, not as a precise prediction. The optimal sell window uses the known ENTSO-E day-ahead prices (published the night before, so certain) combined with the ML generation estimate.
 
 Both models are exported as JSON and run via a hand-written tree traversal inference engine in TypeScript — no ML library in the browser.
 
@@ -70,7 +72,7 @@ Both models are exported as JSON and run via a hand-written tree traversal infer
 | Source | What it provides | Status |
 |--------|-----------------|--------|
 | [Open-Meteo](https://open-meteo.com) | Real-time solar radiation, cloud cover, temperature | ✅ Live |
-| [ENTSO-E](https://transparency.entsoe.eu) | Day-ahead spot prices (PLN/MWh) | ✅ Live |
+| [ENTSO-E](https://transparency.entsoe.eu) | Day-ahead spot prices (PLN/MWh) | ✅ Live (local only) |
 | [PSE OpenData](https://www.pse.pl/dane-systemowe) | National grid load and balance | ⚠️ Known issue [#2](../../issues/2) |
 
 ---
@@ -91,6 +93,9 @@ You'll need a free ENTSO-E token for live prices — register at [transparency.e
 ```bash
 echo "VITE_ENTSO_TOKEN=your-token-here" > .env
 ```
+
+Without it the app falls back to simulated prices automatically.
+
 **To retrain the models:**
 
 ```bash
@@ -104,8 +109,6 @@ uv run python scripts/train_price.py
 Requires Python 3.11+ and [uv](https://astral.sh/uv).
 
 ---
-
-## Issues
 
 Open issues tracked in the [Issues tab](../../issues).
 
